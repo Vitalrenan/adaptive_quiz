@@ -88,7 +88,8 @@ def setupAula(materia):
         df_classes=get_df(db,'classes',['_id','blocks'])
         blocks = df_classes[df_classes._id.isin([aula])]['blocks'].to_list()[0]
         df_blocks=get_df(db,'blocks',['_id','questions','content'])
-        questions = df_blocks[df_blocks._id.isin(blocks)]['questions'].to_list()[-1]
+        filtro_questoes = df_blocks[df_blocks._id.isin(blocks)]['questions'].apply(lambda x: len(x)!=0)
+        questions = df_blocks[(df_blocks._id.isin(blocks))&(filtro_questoes)]['questions'].to_list()[0]
         
         conteudo_aula = df_blocks[df_blocks._id.isin(blocks)]['content'].to_list()
         conteudo_aula_tratado=[]
