@@ -1,8 +1,3 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
-
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
@@ -20,6 +15,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
 import re
+import unicodedata
 
 #função setup conteudo de aula e questão quiz
 def get_df(db, collection_name,colunas):
@@ -69,6 +65,7 @@ def trata_alternativas(texto):
 
 @st.cache_data 
 def setupAula(materia):
+    materia = ''.join(c for c in materia if not unicodedata.category(c).startswith('C'))
     try:
         server=os.environ["SERVER_TYPE"]
         user_alx=os.environ["MONGO_ALEXANDRIA_USERNAME"]
@@ -79,36 +76,40 @@ def setupAula(materia):
         client = MongoClient(str_conn)
         db = client[clt_alx]
     except:
-        st.error(body='Erro ao extrair questões do alexandria',icon='🚨')
-        return ''
+        st.error(body='Erro ao conectar com o alexandria',icon='🚨')
+        #st.stop()
     
     #requisições
-    df_disciplinas = get_df(db, 'disciplines', ['title','learningUnits'])
-    LearningUnit =df_disciplinas[df_disciplinas.title.isin([materia])]['learningUnits'].to_list()[0][0]
-    df_learningunits=get_df(db,'learningunits',['_id','classes'])
-    aula = df_learningunits[df_learningunits._id.isin([LearningUnit])]['classes'].to_list()[0][0]
-    df_classes=get_df(db,'classes',['_id','blocks'])
-    blocks = df_classes[df_classes._id.isin([aula])]['blocks'].to_list()[0]
-    df_blocks=get_df(db,'blocks',['_id','questions','content'])
-    questions = df_blocks[df_blocks._id.isin(blocks)]['questions'].to_list()[-1]
-    
-    conteudo_aula = df_blocks[df_blocks._id.isin(blocks)]['content'].to_list()
-    conteudo_aula_tratado=[]
-    for i in conteudo_aula:
-        if i!=None:
-            conteudo_aula_tratado.append(from_html_to_text(i))
-    conteudo_aula=(" ".join(conteudo_aula_tratado))
-    
-    df_questions=get_df(db,'questions',['_id','type','level','alternatives','description','feedback','title'])
-    df_questions = df_questions[df_questions._id.isin(questions)]
-    for i in df_questions.columns:
-        df_questions[i]=df_questions[i].astype(str)
-    df_questions = df_questions[df_questions.type.isin(['multiple-choice','complex-multiple-choice'])].sample()
-    comando_titulo= from_html_to_text(df_questions['title'].item())
-    comando_descricao=from_html_to_text(df_questions['description'].item())
-    feedback=from_html_to_text(df_questions['feedback'].item())
-    alternativas=from_html_to_text(df_questions['alternatives'].item())
-    return comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula
+    try:
+        df_disciplinas = get_df(db, 'disciplines', ['title','learningUnits'])
+        LearningUnit = df_disciplinas[df_disciplinas.title.isin([materia])]['learningUnits'].to_list()[0][0]    
+        df_learningunits=get_df(db,'learningunits',['_id','classes'])
+        aula = df_learningunits[df_learningunits._id.isin([LearningUnit])]['classes'].to_list()[0][0]
+        df_classes=get_df(db,'classes',['_id','blocks'])
+        blocks = df_classes[df_classes._id.isin([aula])]['blocks'].to_list()[0]
+        df_blocks=get_df(db,'blocks',['_id','questions','content'])
+        questions = df_blocks[df_blocks._id.isin(blocks)]['questions'].to_list()[-1]
+        
+        conteudo_aula = df_blocks[df_blocks._id.isin(blocks)]['content'].to_list()
+        conteudo_aula_tratado=[]
+        for i in conteudo_aula:
+            if i!=None:
+                conteudo_aula_tratado.append(from_html_to_text(i))
+        conteudo_aula=(" ".join(conteudo_aula_tratado))
+        
+        df_questions=get_df(db,'questions',['_id','type','level','alternatives','description','feedback','title'])
+        df_questions = df_questions[df_questions._id.isin(questions)]
+        for i in df_questions.columns:
+            df_questions[i]=df_questions[i].astype(str)
+        df_questions = df_questions[df_questions.type.isin(['multiple-choice','complex-multiple-choice'])].sample()
+        comando_titulo= from_html_to_text(df_questions['title'].item())
+        comando_descricao=from_html_to_text(df_questions['description'].item())
+        feedback=from_html_to_text(df_questions['feedback'].item())
+        alternativas=from_html_to_text(df_questions['alternatives'].item())
+        return comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula
+    except:
+        st.error(body=f'Erro ao extrair a matéria {materia} do alexandria',icon='🚨')
+        return '','','','',''
 
 
 
