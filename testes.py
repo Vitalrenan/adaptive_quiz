@@ -29,10 +29,8 @@ def upload_and_generate_sas_token(file_path, blob_name):
             blob_name=unique_blob_name,  
             account_key=AZURE_ACCOUNT_KEY,  
             permission=BlobSasPermissions(read=True),  
-            expiry=token_expiry  
-        )  
+            expiry=token_expiry  )
         return f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{unique_blob_name}?{sas_token}"  
-  
     except Exception as e:  
         print(f"Erro ao fazer upload do arquivo PDF e gerar o token SAS: {str(e)}") 
          
@@ -74,6 +72,9 @@ with st.sidebar:
 
 
 comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula = setupAula(user_materia)
+#Stop no caso de problema na requisição
+if comando_titulo=='':
+    st.stop()
 col1, col2 = st.columns(spec=[0.6,0.4])
 with col1: 
     st.markdown(comando_titulo)
