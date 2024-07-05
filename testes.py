@@ -209,7 +209,6 @@ with col2:
                                             questao_inicial=questao_inicial,
                                             questao=f"Questao:{comando_titulo}.{comando_descricao}.",
                                             conteudo_aula=conteudo_aula)
-        completion = guardrail_camada_final(llm, f"Questao:{comando_titulo}.{comando_descricao}.", completion)
         st.session_state['messages'] = messages
         st.session_state['st_messages'].extend([{"role": "user", "content": resposta_aluno},
                                                 {"role": "assistant", "content": completion}])
