@@ -167,17 +167,26 @@ def interacao_inicial(user_name, user_curso, llm, questao_inicial, messages):
     messages.append(["assistant",str(completion_inicial)])
     return completion_inicial, messages
 
-def conversa(input_aluno, messages, llm):   
-    input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
-    please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
-    Do never offer to calculate too, tell me to try instead."""
-    messages.append(["user",str(input_aluno)])
-    response=llm.invoke(messages)
-    response = response.content
-    if response.startswith('Olá!'):
-        response = response.replace('Olá! ','')
-    messages.append(["assistant", response])
-    return response, messages
+
+def conversa(input_aluno, messages, llm, questao):   
+    greeting_condition = guard_rail_de_resposta_humanizada(llm, input_aluno)
+    if greeting_condition=='True':
+        messages.append(["user",str(input_aluno)])
+        response=llm.invoke(input_aluno)
+        response = guardrail_camada_final_conversa_basica(llm, response.content)
+        messages.append(["assistant", response])
+        return response, messages
+    else:
+        input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
+        please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
+        Do never offer to calculate too, tell me to try instead."""
+        messages.append(["user",str(input_aluno)])
+        response=llm.invoke(messages)
+        if response.content.startswith('Olá!'):
+            response = response.content.replace('Olá! ','')
+        response = guardrail_camada_final(llm, questao, response)
+        messages.append(["assistant", response])
+        return response, messages
 
 def quiz_orquestrator(llm, input_aluno, messages, user_name, user_curso, questao_inicial, questao, conteudo_aula):
     if messages==[]:
@@ -185,7 +194,7 @@ def quiz_orquestrator(llm, input_aluno, messages, user_name, user_curso, questao
         completion, messages = interacao_inicial(user_name, user_curso, llm, questao_inicial, messages)
         return completion, messages 
     else:
-        completion , messages = conversa(input_aluno, messages, llm)
+        completion , messages = conversa(input_aluno, messages, llm, questao)
     return completion, messages
 
 def gera_sugestoes(llm, questao, messages):
@@ -236,6 +245,65 @@ def guardrail_camada_final(llm, questao, completion):
     
     Here goes the text that AI should moderate: ```{completion}```
     Finally: If the text did not infringe any rule, AI should just replicate the original text.
+    Important: Do not include triple backticks on the completion
     """
     final_guardrail = llm.invoke(prompt)
     return  final_guardrail.content
+
+
+def guardrail_camada_final_conversa_basica(llm, completion):
+    prompt=f"""The text between triple backticks must be written in Brazillian portuguese
+    and should motivate the student to complete the quiz question.
+    
+    If it is written in any another language than brazillian portuguese or if it 
+    does not contain any motivation, translate it to brazillian portuguese and add
+    just one phrase motivating your student to complete the quiz;
+    
+    Here goes the text: ```{completion}```
+    Important: Just return the rewritten text on your completion. Don't write anything else.
+    Important: Do not include triple backticks on the completion
+    """
+    final_guardrail = llm.invoke(prompt)
+    return  final_guardrail.content
+
+def guard_rail_de_resposta_humanizada(llm, input_aluno):
+    condition_prompt= f"""
+    Context: You are a academic teacher named Edu who works at Cogna Educação.
+    You must analyze a text between triple backticks, checking if the text
+    contains a greeting, a thanks or a chitchat with the user. If it does, just return the boolean value True.
+    Or if it does not contain greeting, a chitchat, a thanks message, just return False instead.
+    Remember, you will be talking to people of all ages, so understand that they may use slang and dialects.
+    Search for informal dictionaries to understand what the users are talking with you.
+    Now, here goes some examples of greeting, thanks messages and simples chats in brazillian portuguese:
+    ***Greetings***
+    Olá, tudo bem?;
+    Oi;
+    Oie;
+    Opa, tudo joia?;
+    Estou bem, obrigada
+    E aí, beleza?
+    Salve, bão?;
+    Salve, Edu;
+    Fala meu mano;
+    Fala parceiro;
+    Hey;
+    Ahoy;
+    Heya;
+    Fala aí mano;
+    Iae, beleza?;  
+    Tudo joia com você?;
+    *** Thanks ***
+    Obrigada pela ajuda!;
+    Valeu pela ajuda, mano;
+    Tamo junto, chat;
+    Valeu Chat;
+    Ok, obrigada!;
+    Valeu, Edu!;
+    É nóis Edu!;
+    É nóis, Eduzão!;
+    Valeu, cara;
+    Here goes the text you must analyze: ```{input_aluno}```
+    Attention! You must always respond in Brazillian Portuguese PT-BR
+    """
+    greeting_condition = llm.invoke(condition_prompt)
+    return greeting_condition.content  
