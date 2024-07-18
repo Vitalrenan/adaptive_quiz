@@ -1,42 +1,17 @@
 import streamlit as st
-from utils import setupAula, cursos_dict, trata_alternativas, quiz_orquestrator, gera_sugestoes, guardrail_camada_final
-st.set_page_config(layout="wide")
+from langchain_openai import AzureChatOpenAI
+from utils import quiz_orquestrator, gera_sugestoes
+from utils.setup_requests import cursos_dict, setupAula, questao_com_imagem
+from utils.util_tools import trata_alternativas
+from utils.blob_setup import upload_and_generate_sas_token
+from datetime import datetime
 import os
 import json
-from langchain_openai import AzureChatOpenAI
-from datetime import datetime, timedelta
-from azure.storage.blob import BlobServiceClient, BlobSasPermissions, generate_blob_sas
-
-#azure blog setup
-AZURE_ACCOUNT_NAME = os.getenv('AZURE_ACCOUNT_NAME')
-AZURE_ACCOUNT_KEY = os.getenv('AZURE_ACCOUNT_KEY')
-AZURE_CONTAINER_NAME = os.getenv('AZURE_CONTAINER_NAME')
-def upload_and_generate_sas_token(file_path, blob_name):  
-    _, extensao = os.path.splitext(file_path)  
-    extensao = extensao.split('?')[0]  
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
-    unique_blob_name = f"{blob_name}_{timestamp}{extensao}"  
-    try:  
-        blob_service_client = BlobServiceClient(account_url=f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net",  
-                                                credential=AZURE_ACCOUNT_KEY)  
-        blob_container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)  
-        with open(file_path, "rb") as file:  
-            blob_client = blob_container_client.upload_blob(name=unique_blob_name, data=file, overwrite=True)
-        token_expiry = datetime.now() + timedelta(hours=120)  
-        sas_token = generate_blob_sas(  
-            account_name=AZURE_ACCOUNT_NAME,  
-            container_name=AZURE_CONTAINER_NAME,  
-            blob_name=unique_blob_name,  
-            account_key=AZURE_ACCOUNT_KEY,  
-            permission=BlobSasPermissions(read=True),  
-            expiry=token_expiry  )
-        return f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{unique_blob_name}?{sas_token}"  
-    except Exception as e:  
-        print(f"Erro ao fazer upload do arquivo PDF e gerar o token SAS: {str(e)}") 
-         
+st.set_page_config(layout="wide")         
 
 #Setup inicial
 llm = AzureChatOpenAI(
+  azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
   openai_api_version = os.environ["AZURE_OPENAI_API_VERSION"],
   azure_deployment = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"]
 )
@@ -53,7 +28,6 @@ with colB:
     
 with st.sidebar:
     st.image(logo)
-
     cursos=cursos_dict()
     user_name = st.text_input('Insira seu nome e confirme')
     user_curso = st.selectbox("Curso", (cursos.keys()))
@@ -69,9 +43,18 @@ with st.sidebar:
     if send_log:
         st.markdown('Dados enviados!')
         st.markdown(':rocket:')
+    
+    st.divider()
+    nova_questao_reset_buffer = st.button(label='Testar nova questão', type ='secondary')
+    st.markdown(':warning: Atenção! Isso irá resetar a questão em tela e todo o histórico.\
+        Caso ainda não tenha enviado o resultado do teste, considere enviar antes de mudar de questão')
 
+if user_curso!='Questoes com Imagem':
+    comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula = setupAula(user_materia)
+    img_tag=''
+else:
+    comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula, img_tag = questao_com_imagem(user_materia)
 
-comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula = setupAula(user_materia)
 #Stop no caso de problema na requisição
 if comando_titulo=='':
     st.stop()
@@ -79,6 +62,8 @@ col1, col2 = st.columns(spec=[0.6,0.4])
 with col1: 
     st.markdown(comando_titulo)
     st.markdown(comando_descricao)
+    if img_tag!='': 
+        st.image(img_tag)
     alternativas = alternativas.replace('[','').replace(']','').replace("'",'"')
     alternativas, alternativa_correta = trata_alternativas(alternativas)
     st.radio('alternativas',alternativas)
@@ -102,6 +87,17 @@ with col2:
         st.session_state['opcao_B_input'] = ''
         st.session_state['opcao_C_input'] = ''
         st.session_state['historico_sugestoes']=[]
+    if nova_questao_reset_buffer:
+        st.session_state['st_messages'] = []
+        st.session_state['messages'] = [] 
+        st.session_state['sugestoes'] = ''
+        st.session_state['opcao_A_input'] = ''
+        st.session_state['opcao_B_input'] = ''
+        st.session_state['opcao_C_input'] = ''
+        st.session_state['historico_sugestoes']=[]
+        st.cache_data.clear()
+        st.rerun()
+        
         
     #Interação inicial
     if st.session_state['st_messages'] == []:
@@ -111,12 +107,11 @@ with col2:
                                             user_name=user_name,
                                             user_curso=user_curso,
                                             questao_inicial=questao_inicial,
-                                            questao=f"Questao:{comando_titulo}.{comando_descricao}.",
+                                            questao=f"Questao:{comando_titulo}.{comando_descricao}.{img_tag}",
                                             conteudo_aula=conteudo_aula)
         st.session_state['messages'] = messages
         st.session_state['st_messages'].append({"role": "assistant", "content": completion}) 
     
-
     #Renderiza chat                
     for n,message in enumerate(st.session_state['st_messages']):
         with st.chat_message(message["role"]):
