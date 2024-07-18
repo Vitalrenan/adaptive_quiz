@@ -5,122 +5,16 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
-
-# from langchain.chains import SequentialChain
-# from langchain.chains import LLMChain
-# from langchain.prompts import ChatPromptTemplate
-# from langchain.chains import ConversationChain
-# from langchain.memory import ConversationSummaryBufferMemory
-# from langchain_openai import AzureChatOpenAI
-# from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 import os
-from pymongo import MongoClient
-from bs4 import BeautifulSoup
-import pandas as pd
-import streamlit as st
 import re
-import unicodedata
-
-#função setup conteudo de aula e questão quiz
-def get_df(db, collection_name,colunas):
-    print(f"Coletando base {collection_name}\n")
-    lista_rows=[]
-    collection = db[collection_name]
-    query = collection.find()
-    for x in query:
-        filtered_row = {key: x.get(key) for key in colunas}
-        lista_rows.append(filtered_row)
-    df=pd.DataFrame(lista_rows)
-    return df
-
-def cursos_dict():
-    cursos={
-        'Pedagogia':['PENSAMENTO CIENTÍFICO','PRÁTICAS PEDAGÓGICAS: IDENTIDADE DOCENTE​','FUNCIONAMENTO DA EDUCAÇÃO BRASILEIRA E POLÍTICAS PÚBLICAS​','FUNDAMENTOS DA EDUCAÇÃO​','PSICOLOGIA DA EDUCAÇÃO E DA APRENDIZAGEM'],
-        'Administração':['MATEMÁTICA FINANCEIRA','LEGISLAÇÃO EMPRESARIAL APLICADA','ANÁLISE DE CUSTOS​','MÉTODOS QUANTITATIVOS​','OPTATIVA I (EDUCAÇÃO AMBIENTAL;GESTÃO DO CONHECIMENTO)​'],
-        'Gestão em RH':['MATEMÁTICA FINANCEIRA','LEGISLAÇÃO EMPRESARIAL APLICADA','GESTÃO DE PESSOAS​','MÉTODOS QUANTITATIVOS​','OPTATIVA  II (AVALIAÇÃO DE PERFORMANCE; COMUNICAÇÃO E EDUCAÇÃO CORPORATIVA; LIBRAS - LÍNGUA BRASILEIRA DE SINAIS)​','PROJETO INTEGRADO INOVAÇÃO - GESTÃO​'],
-        'Desenvolvimento de Sistemas':['ENGENHARIA DE SOFTWARE​','LINGUAGEM DE PROGRAMAÇÃO​','LÓGICA E MATEMÁTICA COMPUTACIONAL','ALGORITMOS E PROGRAMAÇÃO ESTRUTURADA​','ANÁLISE E MODELAGEM DE SISTEMAS​','PROJETO INTEGRADO INOVAÇÃO - ANÁLISE E DESENVOLVIMENTO DE SISTEMAS​'],
-        'Serviço Social':['INTRODUÇÃO À FILOSOFIA​','ESTATÍSTICA E INDICADORES SOCIAIS​','ADMINISTRAÇÃO E PLANEJAMENTO DE SERVIÇO SOCIAL​','LEGISLAÇÃO SOCIAL E DIREITOS HUMANOS​','ECONOMIA POLÍTICA​'],
-        'Perícia Criminal':['FUNDAMENTOS HISTÓRICOS E INTRODUÇÃO AO ESTUDO DO DIREITO','FUNDAMENTOS DE INVESTIGAÇÃO E CRIMINALÍSTICA​','TEORIA GERAL DO PROCESSO​','EXPANSÃO DA CRIMINALIDADE​','TEORIA GERAL DO DIREITO CONSTITUCIONAL','PROJETO INTEGRADO INOVAÇÃO - INVESTIGAÇÃO E PERÍCIA CRIMINAL​'],
-    }
-    return cursos
-
-def from_html_to_text(tag):
-    tag=tag.encode("utf-8")
-    soup = BeautifulSoup(tag, features="html.parser")
-    for script in soup(["script", "style"]):
-        script.extract()   
-    text = soup.get_text()
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = '\n'.join(chunk for chunk in chunks if chunk)
-    return text
-
-def trata_alternativas(texto):
-    itens = re.findall(r"\{(.*?)\}", texto)
-    alternativas=[]
-    correcoes=[]
-    for item in itens:
-        alternativa=item.split('",')[0].split('"text": ')[1][1:]
-        alternativas.append(alternativa)
-        
-        correcao=item.split('"isRightAnswer": ')[1].split(',')[0]
-        correcoes.append(correcao)        
-    return alternativas, correcoes
-
-@st.cache_data 
-def setupAula(materia):
-    materia = ''.join(c for c in materia if not unicodedata.category(c).startswith('C'))
-    try:
-        server=os.environ["SERVER_TYPE"]
-        user_alx=os.environ["MONGO_ALEXANDRIA_USERNAME"]
-        pwd_alx=os.environ["MONGO_ALEXANDRIA_PASSWORD"]
-        port_alx=os.environ["MONGO_ALEXANDRIA_HOST"]
-        clt_alx="alexandria-kroton"
-        str_conn = f"{server}://{user_alx}:{pwd_alx}@{port_alx}"
-        client = MongoClient(str_conn)
-        db = client[clt_alx]
-    except:
-        st.error(body='Erro ao conectar com o alexandria',icon='🚨')
-        #st.stop()
-    
-    #requisições
-    try:
-        df_disciplinas = get_df(db, 'disciplines', ['title','learningUnits'])
-        LearningUnit = df_disciplinas[df_disciplinas.title.isin([materia])]['learningUnits'].to_list()[0][0]    
-        df_learningunits=get_df(db,'learningunits',['_id','classes'])
-        aula = df_learningunits[df_learningunits._id.isin([LearningUnit])]['classes'].to_list()[0][0]
-        df_classes=get_df(db,'classes',['_id','blocks'])
-        blocks = df_classes[df_classes._id.isin([aula])]['blocks'].to_list()[0]
-        df_blocks=get_df(db,'blocks',['_id','questions','content'])
-        filtro_questoes = df_blocks[df_blocks._id.isin(blocks)]['questions'].apply(lambda x: len(x)!=0)
-        questions = df_blocks[(df_blocks._id.isin(blocks))&(filtro_questoes)]['questions'].to_list()[0]
-        
-        conteudo_aula = df_blocks[df_blocks._id.isin(blocks)]['content'].to_list()
-        conteudo_aula_tratado=[]
-        for i in conteudo_aula:
-            if i!=None:
-                conteudo_aula_tratado.append(from_html_to_text(i))
-        conteudo_aula=(" ".join(conteudo_aula_tratado))
-        
-        df_questions=get_df(db,'questions',['_id','type','level','alternatives','description','feedback','title'])
-        df_questions = df_questions[df_questions._id.isin(questions)]
-        for i in df_questions.columns:
-            df_questions[i]=df_questions[i].astype(str)
-        df_questions = df_questions[df_questions.type.isin(['multiple-choice','complex-multiple-choice'])].sample()
-        comando_titulo= from_html_to_text(df_questions['title'].item())
-        comando_descricao=from_html_to_text(df_questions['description'].item())
-        feedback=from_html_to_text(df_questions['feedback'].item())
-        alternativas=from_html_to_text(df_questions['alternatives'].item())
-        return comando_titulo, comando_descricao, feedback, alternativas, conteudo_aula
-    except:
-        st.error(body=f'Erro ao extrair a matéria {materia} do alexandria',icon='🚨')
-        return '','','','',''
-
+from utils.util_tools import from_html_to_text
 
 
 # ####################################
 # ####### Funções de chat ############
 # ####################################
+
 def chat_memory(questao, conteudo_aula):
     #memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=2000)
     #questao=questao.encode("utf-8")
@@ -141,14 +35,14 @@ def chat_memory(questao, conteudo_aula):
 #rag
 def get_aula_rag(conteudo_aula, questao, embeddings):
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100,
+        chunk_size=200,
+        chunk_overlap=50,
         length_function=len,
         is_separator_regex=False)
     docs = splitter.create_documents([conteudo_aula])
     db = Chroma.from_documents(docs, embeddings)
     retriever = db.as_retriever()
-    best_docs=retriever.invoke(questao, search_kwargs={"k": 1})
+    best_docs=retriever.invoke(questao, search_kwargs={"k": 3})
     conteudo_relacionado = "".join([best_docs[i].page_content for i in range(len(best_docs))])
     return conteudo_relacionado
 
@@ -178,8 +72,8 @@ def conversa(input_aluno, messages, llm, questao):
         messages.append(["user",str(input_aluno)])
         response=llm.invoke(input_aluno)
         response = guardrail_camada_final_conversa_basica(llm, response.content)
-        messages.append(["assistant", response])
-        return response, messages
+        messages.append(["assistant", response.content])
+        return response.content, messages
     else:
         input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
         please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
@@ -188,13 +82,33 @@ def conversa(input_aluno, messages, llm, questao):
         response=llm.invoke(messages)
         if response.content.startswith('Olá!'):
             response = response.content.replace('Olá! ','')
-        response = guardrail_camada_final(llm, questao, response)
+        response = guardrail_camada_final(llm, questao, response.content)
         messages.append(["assistant", response])
         return response, messages
 
+def transforma_questaoHTML_em_texto_e_imagem(questao, llm):
+    questao_texto = from_html_to_text(questao)
+    img_filtro_url = r'https?://\S+\.(?:jpg|jpeg|png)'
+    match = re.search(img_filtro_url, questao, re.DOTALL)
+    url_questao = match.group(0) if match else None
+    if url_questao!=None: 
+        img_description_messages = HumanMessage(content=[
+        {"type": "image_url", "image_url": {"url": url_questao}},
+        {"type": "text", "text": f"System: Describe in detail the image in context\
+            with the necessary information to solve the question between triple\
+            backticks: ```{questao_texto}```"}
+        ])
+        descricao_imagem_questao = llm.invoke([img_description_messages])
+        descricao_imagem_questao = descricao_imagem_questao.content
+    else:
+        descricao_imagem_questao=questao_texto
+    return descricao_imagem_questao
+
+
 def quiz_orquestrator(llm, input_aluno, messages, user_name, user_curso, questao_inicial, questao, conteudo_aula):
     if messages==[]:
-        messages = chat_memory(questao, conteudo_aula)
+        questao_com_imagem_descrita = transforma_questaoHTML_em_texto_e_imagem(questao, llm)
+        messages = chat_memory(questao_com_imagem_descrita, conteudo_aula)
         completion, messages = interacao_inicial(user_name, user_curso, llm, questao_inicial, messages)
         return completion, messages 
     else:
