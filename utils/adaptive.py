@@ -74,7 +74,7 @@ def conversa(input_aluno, messages, llm, questao):
         input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
         please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
         Do never offer to calculate too, tell me to try instead."""
-        messages.append(["user",str(input_aluno)])
+        messages.append(["user",input_aluno])
         response=llm.invoke(messages)
         if response.content.startswith('Olá!'):
             response = response.content.replace('Olá! ','')
