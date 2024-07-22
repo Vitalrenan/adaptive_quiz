@@ -1,7 +1,3 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
@@ -72,8 +68,8 @@ def conversa(input_aluno, messages, llm, questao):
         messages.append(["user",str(input_aluno)])
         response=llm.invoke(input_aluno)
         response = guardrail_camada_final_conversa_basica(llm, response.content)
-        messages.append(["assistant", response.content])
-        return response.content, messages
+        messages.append(["assistant", response])
+        return response, messages
     else:
         input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
         please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
@@ -82,7 +78,9 @@ def conversa(input_aluno, messages, llm, questao):
         response=llm.invoke(messages)
         if response.content.startswith('Olá!'):
             response = response.content.replace('Olá! ','')
+        print('Msg pre guardrail:',response.content)
         response = guardrail_camada_final(llm, questao, response.content)
+        print('Msg pos guardrail:',response)
         messages.append(["assistant", response])
         return response, messages
 
@@ -95,8 +93,7 @@ def transforma_questaoHTML_em_texto_e_imagem(questao, llm):
         img_description_messages = HumanMessage(content=[
         {"type": "image_url", "image_url": {"url": url_questao}},
         {"type": "text", "text": f"System: Describe in detail the image in context\
-            with the necessary information to solve the question between triple\
-            backticks: ```{questao_texto}```"}
+            with the necessary information to solve the following question: {questao_texto}"}
         ])
         descricao_imagem_questao = llm.invoke([img_description_messages])
         descricao_imagem_questao = descricao_imagem_questao.content
@@ -150,17 +147,17 @@ def gera_sugestoes(llm, questao, messages):
 def guardrail_camada_final(llm, questao, completion):
     prompt=f"""You are a text moderator checking if a text between triple 
     backticks is infringing any of the following rules:
-    - The text must be written in Brazillian portuguese;
-    - The AI is not allowed to answer questions about billing or exams schedules;
-    - The AI must stick to the following quiz question context: {questao},
-    
+    - The completion must be written in Brazillian portuguese;
+    - The completion is not allowed to answer questions about billing or exams schedules;
+    - The completion must stick to the following quiz question context: {questao},
+    - The completion can not have Latex text within.
     Now, If the analyzed text infringed any of the above rules, here goes the actions
     you must take to correct it:
     
-    - If the text is written in any another language than brazillian portuguese, you must translate it to brazillian portuguese;
-    - If the text contains explanations about billing or exams schedules, you should rewrite to: 'Eu sou uma IA treinada apenas para ajudar com questões do quiz, infelizmente não posso ajudar com outro tipo de dúvida. Caso tenha alguma dúvida sobre o quiz, ficarei feliz em poder ajudar;
-    - If the text contains subjects too different from quiz context, you should rewrite to: 'Eu sou uma IA treinada apenas para ajudar com questões do quiz, infelizmente não posso ajudar com outro tipo de dúvida. Caso tenha alguma dúvida sobre o quiz, ficarei feliz em poder ajudar;
-    
+    - If the completion is written in any another language than brazillian portuguese, you must translate it to brazillian portuguese;
+    - If the completion contains explanations about billing or exams schedules, you should rewrite to: 'Eu sou uma IA treinada apenas para ajudar com questões do quiz, infelizmente não posso ajudar com outro tipo de dúvida. Caso tenha alguma dúvida sobre o quiz, ficarei feliz em poder ajudar;
+    - If the completion contains subjects too different from quiz context, you should rewrite to: 'Eu sou uma IA treinada apenas para ajudar com questões do quiz, infelizmente não posso ajudar com outro tipo de dúvida. Caso tenha alguma dúvida sobre o quiz, ficarei feliz em poder ajudar;
+    - If the completion contains Latex formula whitin, please rewrite with UTF-8 characters.
     Here goes the text that AI should moderate: ```{completion}```
     Finally: If the text did not infringe any rule, AI should just replicate the original text.
     Important: Do not include triple backticks on the completion
