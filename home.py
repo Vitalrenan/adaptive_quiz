@@ -133,6 +133,7 @@ with col2:
                     st.session_state['opcao_A_input']=opcao_A_input
                     st.session_state['opcao_B_input']=opcao_B_input
                     st.session_state['opcao_C_input']=opcao_C_input
+        
         else:
              if n+1==len(st.session_state['st_messages']):
                 with st.chat_message('user'):
