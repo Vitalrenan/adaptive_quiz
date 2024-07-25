@@ -74,7 +74,7 @@ def conversa(input_aluno, messages, llm, questao):
         input_aluno = f"""{input_aluno}. Atention! Do not solve the question. Instead of solving it,
         please briefly explain me the necessary reasoning to solve it. Then, tell me to try to apply the reasoning.
         Do never offer to calculate too, tell me to try instead."""
-        messages.append(["user",input_aluno])
+        messages.append(["user",str(input_aluno)])
         response=llm.invoke(messages)
         if response.content.startswith('Olá!'):
             response = response.content.replace('Olá! ','')
@@ -141,7 +141,8 @@ def gera_sugestoes(llm, questao, messages):
     sugestoes_list = sugestoes.split("->")
     sugestoes_dict = {}
     for n,i in enumerate(sugestoes_list[1:]):
-        sugestoes_dict[n+1] = i.replace('\n','')[1:]
+        i = i.replace('\n','')[1:]
+        sugestoes_dict[n+1] = i.split('?')[0]+'?'
     return sugestoes_dict
 
 def guardrail_camada_final(llm, questao, completion):
