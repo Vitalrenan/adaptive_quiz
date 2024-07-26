@@ -50,7 +50,7 @@ def questao_com_imagem(materia):
         'Administração':[ObjectId('65b7216980efedfc5d06bbdb'),ObjectId('659d876db620d3307760c609'), ObjectId('65a00944c74155a97f0233ed'), ObjectId('659c09bb69fa81e86fdc59c6')],
         'Gestão em RH':[''],
         'Desenvolvimento de Sistemas':[ObjectId('6683e45f389df01c5baa1506'), ObjectId('659c0cafd90c3348d2ffbce1')],
-        'Serviço Social':[''],
+        'Serviço Social':[ObjectId('65a92c2e8ab6043ae295e2da'),ObjectId('65a5458980efedfc5d905c3a'),ObjectId('65a19b0b27a954605040abcc'),ObjectId('65a82f6c8ab6043ae255ec12'),],
         'Perícia Criminal':['']}
     id_questao = random.choice(banco_questoes[materia])
     
