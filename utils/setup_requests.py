@@ -46,7 +46,7 @@ def cursos_dict():
 @st.cache_data 
 def questao_com_imagem(materia):
     banco_questoes={
-        'Pedagogia':[ObjectId('65a85d5580efedfc5dde6a30'), ObjectId('65a18b217e88b6381ac88a22')],
+        'Pedagogia':[ObjectId('659fd62cc74155a97fdee23c'), ObjectId('65a003ae5300d97f2449add8'), ObjectId('65a332c027a95460504ca381'), ObjectId('65a352bc27a95460504d36b3'), ObjectId('65a58f4b88407362904ef7b8'), ObjectId('6683e96714a3217a85268795'), ObjectId('6684250d389df01c5b773c5e')],
         'Administração':[ObjectId('65b7216980efedfc5d06bbdb'),ObjectId('659d876db620d3307760c609'), ObjectId('65a00944c74155a97f0233ed'), ObjectId('659c09bb69fa81e86fdc59c6')],
         'Gestão em RH':[''],
         'Desenvolvimento de Sistemas':[ObjectId('6683e45f389df01c5baa1506'), ObjectId('659c0cafd90c3348d2ffbce1')],
